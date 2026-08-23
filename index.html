@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#7f95c5">
+<title>トーク</title>
+<style>
+  :root{
+    --bg:#7f95c5;
+    --green:#8ce05a;
+    --ink:#1f2024;
+    --meta:rgba(255,255,255,.9);
+    --live:#a8362a;
+    --line:#dedbd4;
+    --sub:#6f7178;
+    --sheet:#fffefb;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0;overflow:hidden}
+  body{
+    background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+    font-size:15px;line-height:1.6;
+  }
+  #app{position:absolute;inset:0;display:flex;flex-direction:column}
+
+  /* ---- ヘッダー ---- */
+  header#top{
+    flex:none;display:flex;align-items:center;gap:4px;
+    padding:calc(env(safe-area-inset-top) + 8px) 10px 8px;
+    color:#26282e;
+  }
+  .hb{border:0;background:none;padding:6px;color:#26282e;display:grid;place-items:center}
+  #title{
+    font-size:17px;font-weight:700;letter-spacing:.01em;flex:1;
+    display:flex;align-items:center;gap:7px;min-width:0;
+    user-select:none;-webkit-user-select:none;
+    white-space:nowrap;overflow:hidden;
+  }
+  #dot{flex:none;width:5px;height:5px;border-radius:50%;background:transparent;transition:background .4s}
+  body.rec #dot{background:var(--live);animation:beat 4s ease-in-out infinite}
+  @keyframes beat{0%,100%{opacity:.18}50%{opacity:.5}}
+
+  /* ---- トーク ---- */
+  #chat{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 0 12px}
+  .day{
+    width:max-content;margin:10px auto 12px;background:rgba(58,68,92,.4);color:#fff;
+    font-size:11px;padding:3px 13px;border-radius:12px;
+  }
+  .row{display:flex;align-items:flex-end;gap:6px;margin:3px 12px}
+  .row.in{justify-content:flex-start}
+  .row.out{justify-content:flex-end}
+  .avatar{
+    flex:none;width:34px;height:34px;border-radius:50%;background:#3c4356;
+    display:grid;place-items:center;font-size:19px;align-self:flex-start;overflow:hidden;
+  }
+  .avatar.hide{visibility:hidden}
+  .bubble{
+    max-width:66%;padding:7px 12px;border-radius:17px;
+    font-size:15px;line-height:1.5;word-break:break-word;white-space:pre-wrap;
+  }
+  .in .bubble{background:#fff;border-top-left-radius:5px}
+  .out .bubble{background:var(--green);border-bottom-right-radius:5px}
+  .bubble.stamp{background:none;padding:0;font-size:54px;line-height:1.15}
+  .meta{flex:none;font-size:10px;color:var(--meta);line-height:1.35;padding-bottom:1px}
+  .out .meta{text-align:right}
+  .meta .read{display:block}
+  .typing span{
+    display:inline-block;width:6px;height:6px;border-radius:50%;background:#b9bcc4;margin:0 2px;
+    animation:ty 1.2s infinite;
+  }
+  .typing span:nth-child(2){animation-delay:.15s}
+  .typing span:nth-child(3){animation-delay:.3s}
+  @keyframes ty{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-4px);opacity:1}}
+
+  /* ---- 入力バー ---- */
+  footer#bar{
+    flex:none;display:flex;align-items:center;gap:2px;
+    background:#fff;padding:7px 6px calc(env(safe-area-inset-bottom) + 7px);
+  }
+  .ib{
+    border:0;background:none;padding:7px;color:#3a3d45;
+    display:grid;place-items:center;transition:opacity .15s,color .12s,transform .12s;
+  }
+  .ib.flash{opacity:.25}
+  .ib.hit-blue{color:#1a73e8;transform:scale(1.18)}
+  .ib.hit-red{color:#e0342a;transform:scale(1.18)}
+  #field{
+    flex:1;display:flex;align-items:center;background:#f1f2f4;
+    border-radius:19px;padding:0 4px 0 14px;min-width:0;
+  }
+  #txt{
+    flex:1;border:0;background:none;font:inherit;font-size:16px;
+    padding:8px 0;min-width:0;outline:none;color:var(--ink);
+  }
+  #txt::placeholder{color:#9a9da6}
+
+  /* ---- 隠し管理シート ---- */
+  .sheet{position:absolute;inset:0;z-index:900;background:var(--sheet);display:none;flex-direction:column}
+  .sheet.on{display:flex}
+  .sheet header{
+    display:flex;align-items:center;gap:12px;
+    padding:calc(env(safe-area-inset-top) + 14px) 16px 14px;border-bottom:1px solid var(--line);
+  }
+  .sheet header h2{margin:0;font-size:16px;font-weight:700;flex:1}
+  .sheet .close{
+    width:38px;height:38px;border-radius:9px;border:1px solid var(--line);
+    background:#fff;font-size:17px;display:grid;place-items:center;padding:0;
+  }
+  .sheet .body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px 60px}
+  .item{border:1px solid var(--line);border-radius:10px;padding:13px;margin-bottom:10px;background:#fff}
+  .item .m{font-size:12px;color:var(--sub);font-variant-numeric:tabular-nums}
+  .item img{width:100%;border-radius:7px;margin-top:9px;display:block}
+  .item video{width:100%;border-radius:7px;margin-top:9px;display:none;background:#000}
+  .btns{display:flex;gap:7px;margin-top:11px}
+  .btns button{flex:1;border:1px solid var(--line);background:#fff;border-radius:8px;font:inherit;font-size:13px;padding:9px}
+  .btns .del{flex:0 0 62px;color:#a8362a;border-color:#e3cdc9}
+  .empty{color:var(--sub);font-size:14px;padding:26px 0;text-align:center}
+  h3.sec{font-size:13px;color:var(--sub);margin:24px 0 10px}
+
+  #toast{
+    position:absolute;left:50%;bottom:110px;transform:translateX(-50%);
+    background:rgba(31,32,36,.9);color:#fff;font-size:13px;padding:9px 16px;
+    border-radius:20px;z-index:950;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;
+  }
+  #toast.on{opacity:1}
+  video#src{display:none}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header id="top">
+    <button class="hb" aria-label="戻る">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 5 8 12 15 19"/></svg>
+    </button>
+    <div id="title">ブリティッシュブルー<span id="dot"></span></div>
+    <button class="hb" aria-label="検索">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21" stroke-linecap="round"/></svg>
+    </button>
+    <button class="hb" aria-label="通話">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a12 12 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>
+    </button>
+    <button class="hb" aria-label="メニュー">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+    </button>
+  </header>
+
+  <div id="chat"><div class="day">今日</div></div>
+
+  <footer id="bar">
+    <button class="ib" id="plus" aria-label="追加">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <button class="ib" id="cam" aria-label="カメラ">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 7h3l2-2.5h6L17 7h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.6"/></svg>
+    </button>
+    <button class="ib" id="pic" aria-label="写真">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="9.5" r="1.7"/><path d="M4.5 17.5l5-5 3.5 3.5 3-3 3.5 3.5"/></svg>
+    </button>
+    <div id="field">
+      <input id="txt" placeholder="Aa" autocomplete="off" enterkeyhint="send">
+      <button class="ib" id="emo" aria-label="絵文字">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 14a4.4 4.4 0 0 0 7 0"/><line x1="9.3" y1="9.7" x2="9.3" y2="9.8"/><line x1="14.7" y1="9.7" x2="14.7" y2="9.8"/></svg>
+      </button>
+    </div>
+    <button class="ib" id="mic" aria-label="マイク">
+      <svg id="micIcon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/><line x1="12" y1="18" x2="12" y2="21"/></svg>
+      <svg id="sendIcon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2f9e44" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 3L10.5 13.5M21 3l-6.8 18-3.7-7.5L3 9.8 21 3z"/></svg>
+    </button>
+  </footer>
+</div>
+
+<div class="sheet" id="sMgr">
+  <header><h2>記録の管理</h2><button class="close" data-close="sMgr">✕</button></header>
+  <div class="body">
+    <div class="item">
+      <div><strong>保存領域</strong></div>
+      <div class="m" id="quota">確認中…</div>
+    </div>
+    <h3 class="sec">録画バックアップ</h3>
+    <div id="recBody"></div>
+    <h3 class="sec">写真</h3>
+    <div id="noteBody"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<video id="src" muted playsinline></video>
+
+<script>
+"use strict";
+const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
+const SEG_MS=5*60*1000, SLICE=3000;
+
+/* ================= IndexedDB ================= */
+function openDB(){return new Promise((res,rej)=>{
+  const r=indexedDB.open('field-store',1);
+  r.onupgradeneeded=e=>{const db=e.target.result;
+    if(!db.objectStoreNames.contains('sessions'))db.createObjectStore('sessions',{keyPath:'id'});
+    if(!db.objectStoreNames.contains('chunks')){const s=db.createObjectStore('chunks',{keyPath:'key'});s.createIndex('sid','sid');}
+    if(!db.objectStoreNames.contains('notes'))db.createObjectStore('notes',{keyPath:'id'});
+  };
+  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+});}
+const dbp=openDB();
+/* 記録が OS に勝手に消されないよう永続化を要求（証拠保全のため。iOS 15.4+/対応ブラウザのみ） */
+try{ navigator.storage&&navigator.storage.persist&&navigator.storage.persist(); }catch(e){}
+const store=(n,m)=>dbp.then(db=>db.transaction(n,m).objectStore(n));
+const rq=r=>new Promise((res,rej)=>{r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
+const putNote=async n=>rq((await store('notes','readwrite')).put(n));
+const allNotes=async()=>rq((await store('notes','readonly')).getAll());
+const delNote=async id=>rq((await store('notes','readwrite')).delete(id));
+const putSes=async s=>rq((await store('sessions','readwrite')).put(s));
+const getSes=async id=>rq((await store('sessions','readonly')).get(id));
+const allSes=async()=>rq((await store('sessions','readonly')).getAll());
+async function putChunk(sid,seg,i,blob){
+  const key=sid+':'+String(seg).padStart(4,'0')+':'+String(i).padStart(6,'0');
+  return rq((await store('chunks','readwrite')).put({key,sid,blob}));
+}
+async function chunksOf(sid){
+  const st=await store('chunks','readonly');
+  return (await rq(st.index('sid').getAll(sid))).sort((a,b)=>a.key<b.key?-1:1);
+}
+async function delSes(sid){
+  const st=await store('chunks','readwrite');
+  await new Promise(res=>{const c=st.index('sid').openCursor(IDBKeyRange.only(sid));
+    c.onsuccess=e=>{const x=e.target.result; if(x){x.delete();x.continue();}else res();}; c.onerror=()=>res();});
+  return rq((await store('sessions','readwrite')).delete(sid));
+}
+
+function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('on');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('on'),2000);}
+const flash=el=>{el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),200);};
+const hit=(el,cls)=>{el.classList.add(cls);setTimeout(()=>el.classList.remove(cls),450);};
+
+/* ================= トーク ================= */
+const chat=$('#chat');
+const AVATAR='🐈‍⬛';
+const hm=d=>String(d.getHours())+':'+String(d.getMinutes()).padStart(2,'0');
+
+function addMsg(text,side,stamp){
+  const row=document.createElement('div'); row.className='row '+side;
+  const bubble=document.createElement('div');
+  bubble.className='bubble'+(stamp?' stamp':''); bubble.textContent=text;
+  const meta=document.createElement('div'); meta.className='meta';
+  const read=document.createElement('span'); read.className='read';
+  const time=document.createElement('span'); time.textContent=hm(new Date());
+  meta.append(read,time);
+  if(side==='in'){
+    const av=document.createElement('div'); av.className='avatar'; av.textContent=AVATAR;
+    const prev=chat.lastElementChild;
+    if(prev&&prev.classList.contains('in')) av.classList.add('hide');
+    row.append(av,bubble,meta);
+  }else{
+    row.append(meta,bubble);
+  }
+  chat.appendChild(row);
+  chat.scrollTop=chat.scrollHeight;
+  return row;
+}
+
+let typingRow=null;
+function showTyping(){
+  if(typingRow)return;
+  typingRow=document.createElement('div'); typingRow.className='row in';
+  typingRow.innerHTML='<div class="avatar">'+AVATAR+'</div><div class="bubble typing"><span></span><span></span><span></span></div>';
+  chat.appendChild(typingRow); chat.scrollTop=chat.scrollHeight;
+}
+function hideTyping(){ if(typingRow){typingRow.remove();typingRow=null;} }
+
+const STAMPS=['🐾','😺','🐟','😸','🐈‍⬛','💤'];
+const FALLBACK=['にゃ？','ふにゃ〜','にゃるほど','そうにゃんだ','にゃーん🐾','しっぽふりふりにゃ','ごろごろ…😸'];
+const RULES=[
+  [/おはよ/,['おはようにゃ〜☀️','まだねむいにゃ…😪']],
+  [/こんにち/,['こんにちにゃ〜','こんにちにゃ！今日もいい日にゃ']],
+  [/こんばん/,['こんばんにゃー🌙','こんばんにゃ〜']],
+  [/おやすみ/,['おやすみにゃさい💤','いい夢見るにゃ〜🌙']],
+  [/ありがと/,['どういたしましてにゃ😺','にゃんてことないにゃ']],
+  [/疲れ|つかれ/,['おつかれさまにゃ…🐾','ゆっくり休むにゃよ']],
+  [/かわい|カワイ/,['照れるにゃ〜😳','もっと言っていいにゃよ']],
+  [/ごはん|ご飯|お腹|おなか|はらへ|腹減/,['おさかな食べたいにゃ🐟','ちゅーるの時間にゃ？']],
+  [/天気|晴れ|雨/,['今日はひなたぼっこ日和にゃ☀️','雨の日はおうちで丸くなるにゃ']],
+  [/なにして|何して|してる/,['ひなたぼっこしてたにゃ','お昼寝の途中だったにゃ💤']],
+  [/好き|すき/,['ぼくも好きにゃ〜💕','にゃんと…照れるにゃ']],
+  [/犬|いぬ|わん/,['わんちゃんも嫌いじゃないにゃ','こんにちわん🐕って言えばいいのかにゃ？']],
+  [/猫|ねこ|ネコ/,['にゃーん🐈‍⬛','呼んだかにゃ？']],
+  [/仕事|しごと|調査/,['がんばるにゃ〜！','無理しちゃだめにゃよ']],
+  [/かえる|帰る|帰り/,['気をつけて帰るにゃよ','おうちで待ってるにゃ🐾']],
+  [/[?？]$/,['うーん、わからないにゃ…','たぶんそうにゃ','にゃんとも言えないにゃ']],
+];
+function pickReply(t){
+  for(const [re,arr] of RULES){ if(re.test(t)) return {text:arr[Math.floor(Math.random()*arr.length)],stamp:false}; }
+  if(Math.random()<0.15) return {text:STAMPS[Math.floor(Math.random()*STAMPS.length)],stamp:true};
+  return {text:FALLBACK[Math.floor(Math.random()*FALLBACK.length)],stamp:false};
+}
+function botReply(t){
+  setTimeout(()=>{
+    showTyping();
+    setTimeout(()=>{
+      hideTyping();
+      const r=pickReply(t);
+      addMsg(r.text,'in',r.stamp);
+      if(!r.stamp&&Math.random()<0.18)
+        setTimeout(()=>addMsg(STAMPS[Math.floor(Math.random()*STAMPS.length)],'in',true),800);
+    },700+Math.random()*900);
+  },600+Math.random()*1100);
+}
+
+const txt=$('#txt');
+function updateMicSend(){
+  const has=!!txt.value.trim();
+  $('#micIcon').style.display=has?'none':'';
+  $('#sendIcon').style.display=has?'':'none';
+}
+txt.addEventListener('input',updateMicSend);
+txt.addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();send();} });
+$('#mic').onclick=()=>{ if(txt.value.trim())send(); };
+$('#plus').onclick=()=>{};
+$('#emo').onclick=()=>{};
+
+function send(){
+  const t=txt.value.trim(); if(!t)return;
+  txt.value=''; updateMicSend();
+  const row=addMsg(t,'out');
+  setTimeout(()=>{ row.querySelector('.read').textContent='既読'; },600+Math.random()*900);
+  botReply(t);
+}
+
+/* 起動時のあいさつ */
+setTimeout(()=>{
+  showTyping();
+  setTimeout(()=>{
+    hideTyping();
+    const h=new Date().getHours();
+    addMsg(h<5?'こんばんにゃー🌙':h<11?'おはようにゃ〜☀️':h<18?'こんにちにゃ〜':'こんばんにゃー🐈‍⬛','in');
+  },900);
+},700);
+
+/* ================= 位置情報（写真用・任意） ================= */
+function getPos(ms){return new Promise(res=>{
+  if(!navigator.geolocation)return res(null);
+  let done=false;
+  const to=setTimeout(()=>{if(!done){done=true;res(null);}},ms);
+  navigator.geolocation.getCurrentPosition(
+    p=>{if(!done){done=true;clearTimeout(to);res({lat:p.coords.latitude,lng:p.coords.longitude});}},
+    ()=>{if(!done){done=true;clearTimeout(to);res(null);}},
+    {enableHighAccuracy:false,timeout:ms});
+});}
+
+/* ================= 写真 ================= */
+$('#pic').onclick=async()=>{
+  flash($('#pic'));
+  let temp=null, s=stream;
+  try{
+    if(!s){ s=temp=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1600}}}); }
+    const v=$('#src');
+    if(v.srcObject!==s){ v.srcObject=s; await v.play().catch(()=>{}); await new Promise(r=>setTimeout(r,400)); }
+    const cv=document.createElement('canvas');
+    cv.width=v.videoWidth||1280; cv.height=v.videoHeight||720;
+    cv.getContext('2d').drawImage(v,0,0,cv.width,cv.height);
+    const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',.85));
+    const pos=await getPos(2000);
+    await putNote({id:'N'+Date.now(),type:'photo',lat:pos?pos.lat:null,lng:pos?pos.lng:null,blob,at:Date.now()});
+  }catch(e){ toast('カメラを使えませんでした'); }
+  finally{ if(temp) temp.getTracks().forEach(t=>t.stop()); }
+};
+
+/* ================= 録画 ================= */
+let stream=null,recorder=null,session=null,segIdx=0,chunkIdx=0,rot=null,beat=null,wake=null;
+function pickMime(){
+  for(const m of ['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4','video/webm;codecs=vp8,opus','video/webm'])
+    {try{if(MediaRecorder.isTypeSupported(m))return m;}catch(e){}}
+  return '';
+}
+const ext=m=>m&&m.includes('mp4')?'mp4':'webm';
+const fmt=ms=>{const t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=t%60,p=n=>String(n).padStart(2,'0');return h?`${h}:${p(m)}:${p(s)}`:`${p(m)}:${p(s)}`;};
+const size=b=>b>=1073741824?(b/1073741824).toFixed(1)+' GB':Math.round(b/1048576)+' MB';
+
+const VIDEO_C={facingMode:{ideal:'environment'},width:{ideal:854},height:{ideal:480},frameRate:{ideal:24,max:30}};
+
+async function recStart(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:VIDEO_C, audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}
+    });
+  }catch(e){ toast('カメラとマイクを許可してください'); return; }
+  session={id:'S'+Date.now(),startedAt:Date.now(),lastAt:Date.now(),active:true,mime:pickMime(),bytes:0,gaps:0};
+  await putSes(session);
+  segIdx=0; segStart();
+  rot=setInterval(rotate,SEG_MS);
+  beat=setInterval(hb,5000);
+  stream.getTracks().forEach(t=>t.addEventListener('ended',recover));
+  await lock();
+  document.body.classList.add('rec');
+}
+function segStart(){
+  chunkIdx=0;
+  const o={videoBitsPerSecond:900000,audioBitsPerSecond:64000};
+  if(session.mime)o.mimeType=session.mime;
+  try{recorder=new MediaRecorder(stream,o);}catch(e){recorder=new MediaRecorder(stream);}
+  recorder.ondataavailable=async e=>{
+    if(!e.data||!e.data.size||!session)return;
+    try{ await putChunk(session.id,segIdx,chunkIdx++,e.data); session.bytes+=e.data.size; }
+    catch(err){ await recStop('保存領域がいっぱいです'); }
+  };
+  recorder.start(SLICE);
+}
+const stopRecorder=()=>new Promise(r=>{
+  if(!recorder||recorder.state==='inactive')return r();
+  recorder.onstop=()=>r(); try{recorder.stop();}catch(e){r();}
+});
+async function rotate(){ if(!session)return; await stopRecorder(); segIdx++; await putSes(session); if(session)segStart(); }
+async function hb(){ if(!session)return; session.lastAt=Date.now(); await putSes(session); }
+async function recover(){
+  if(!session)return;
+  try{
+    await stopRecorder();
+    if(stream) stream.getTracks().forEach(t=>{try{t.stop();}catch(e){}});
+    stream=await navigator.mediaDevices.getUserMedia({video:VIDEO_C,audio:{echoCancellation:false}});
+    stream.getTracks().forEach(t=>t.addEventListener('ended',recover));
+    segIdx++; session.gaps++; await putSes(session); segStart();
+  }catch(e){ await recStop('カメラが切れたため終了しました'); }
+}
+async function recStop(msg){
+  clearInterval(rot); clearInterval(beat); rot=beat=null;
+  await stopRecorder();
+  if(stream)stream.getTracks().forEach(t=>{try{t.stop();}catch(e){}});
+  stream=null; recorder=null; $('#src').srcObject=null;
+  if(session){ session.active=false; session.endedAt=Date.now(); await putSes(session); session=null; }
+  unlock(); document.body.classList.remove('rec');
+  if(msg) toast(msg);
+}
+async function lock(){ try{ if('wakeLock' in navigator) wake=await navigator.wakeLock.request('screen'); }catch(e){} }
+function unlock(){ try{wake&&wake.release();}catch(e){} wake=null; }
+document.addEventListener('visibilitychange',async()=>{
+  if(document.visibilityState==='visible'&&session){
+    await lock();
+    if(!stream||!stream.getVideoTracks().some(t=>t.readyState==='live')) recover();
+  }
+});
+
+/* カメラアイコン：タップで録画ON/OFF。開始時は青・停止時は赤に一瞬光る（押した時のみ） */
+(function(){
+  const b=$('#cam'); let busy=false;
+  b.onclick=async()=>{
+    if(busy)return; busy=true;
+    if(session){ hit(b,'hit-red'); await recStop(); }
+    else{ hit(b,'hit-blue'); await recStart(); }
+    busy=false;
+  };
+})();
+
+/* 相手の名前を1.5秒長押し → 隠し管理画面 */
+(function(){
+  const b=$('#title'); let t=null;
+  const down=e=>{ e.preventDefault(); t=setTimeout(()=>{ openSheet('sMgr'); t=null; },1500); };
+  const up=()=>{ clearTimeout(t); t=null; };
+  b.addEventListener('touchstart',down,{passive:false});
+  b.addEventListener('touchend',up); b.addEventListener('touchcancel',up);
+  b.addEventListener('mousedown',down); b.addEventListener('mouseup',up); b.addEventListener('mouseleave',up);
+  b.addEventListener('contextmenu',e=>e.preventDefault());
+})();
+window.addEventListener('beforeunload',e=>{ if(session){e.preventDefault();e.returnValue='';} });
+
+/* ================= 隠し管理シート ================= */
+function openSheet(id){ $('#'+id).classList.add('on'); if(id==='sMgr'){renderRec();renderNotes();} }
+function closeSheet(id){ $('#'+id).classList.remove('on'); }
+$$('[data-close]').forEach(b=>b.onclick=()=>closeSheet(b.dataset.close));
+const esc=s=>s.replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+
+async function saveBlob(blob,name){
+  try{
+    const f=new File([blob],name,{type:blob.type});
+    if(navigator.canShare&&navigator.canShare({files:[f]})){ await navigator.share({files:[f]}); return; }
+  }catch(e){}
+  const u=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(u),60000);
+}
+
+async function renderNotes(){
+  const body=$('#noteBody');
+  const notes=(await allNotes()).sort((a,b)=>b.at-a.at);
+  if(!notes.length){ body.innerHTML='<div class="empty">写真はまだありません。</div>'; return; }
+  body.innerHTML='';
+  for(const n of notes){
+    const d=new Date(n.at);
+    const el=document.createElement('div'); el.className='item';
+    const pos=(n.lat!=null&&n.lng!=null)?` · ${n.lat.toFixed(5)}, ${n.lng.toFixed(5)}`:'';
+    el.innerHTML=`<div class="m">${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}${pos}</div>
+      ${n.text?`<div style="margin-top:6px;white-space:pre-wrap">${esc(n.text)}</div>`:''}
+      <div class="btns">${n.blob?'<button data-a="dl">書き出す</button>':''}<button data-a="rm" class="del">削除</button></div>`;
+    if(n.blob){ const img=document.createElement('img'); img.src=URL.createObjectURL(n.blob); el.insertBefore(img, el.querySelector('.btns')); }
+    const dl=el.querySelector('[data-a="dl"]'); if(dl) dl.onclick=()=>saveBlob(n.blob,`photo_${n.id}.jpg`);
+    el.querySelector('[data-a="rm"]').onclick=async()=>{ if(confirm('削除します。')){ await delNote(n.id); renderNotes(); } };
+    body.appendChild(el);
+  }
+}
+
+async function renderRec(){
+  try{ const {quota=0,usage=0}=await navigator.storage.estimate();
+    $('#quota').textContent=`使用 ${size(usage)} ／ 空き ${size(quota-usage)}（およそ ${((quota-usage)/(964000/8*3600)).toFixed(1)} 時間ぶん）`;
+  }catch(e){ $('#quota').textContent='取得できませんでした'; }
+
+  const body=$('#recBody');
+  const ss=(await allSes()).sort((a,b)=>b.startedAt-a.startedAt);
+  if(!ss.length){ body.innerHTML='<div class="empty">バックアップはありません。</div>'; return; }
+  body.innerHTML='';
+  for(const s of ss){
+    const d=new Date(s.startedAt), dur=(s.endedAt||s.lastAt)-s.startedAt;
+    const el=document.createElement('div'); el.className='item';
+    el.innerHTML=`<div><strong>${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}</strong></div>
+      <div class="m">${fmt(dur)} · ${size(s.bytes||0)}${s.active&&(!session||session.id!==s.id)?' · 中断':''}${s.gaps?` · 途切れ${s.gaps}回`:''}</div>
+      <div class="btns"><button data-a="pv">再生</button><button data-a="ex">書き出す</button><button data-a="rm" class="del">削除</button></div>
+      <video preload="none" playsinline controls></video>`;
+    const v=el.querySelector('video');
+    el.querySelector('[data-a="pv"]').onclick=async()=>{
+      if(v.style.display==='block'){ v.pause(); v.style.display='none'; return; }
+      v.src=URL.createObjectURL(await build(s.id)); v.style.display='block';
+    };
+    el.querySelector('[data-a="ex"]').onclick=async()=>{
+      toast('書き出しています…');
+      const b=await build(s.id);
+      saveBlob(b, d.toISOString().slice(0,19).replace(/[-:]/g,'').replace('T','_')+'.'+ext(s.mime));
+    };
+    el.querySelector('[data-a="rm"]').onclick=async()=>{ if(confirm('この記録を削除します。元に戻せません。')){ await delSes(s.id); renderRec(); } };
+    body.appendChild(el);
+  }
+}
+async function build(sid){
+  const s=await getSes(sid), cs=await chunksOf(sid);
+  return new Blob(cs.map(c=>c.blob),{type:s.mime||'video/mp4'});
+}
+</script>
+</body>
+</html>
