@@ -41,9 +41,8 @@
     user-select:none;-webkit-user-select:none;
     white-space:nowrap;overflow:hidden;
   }
-  #dot{flex:none;width:5px;height:5px;border-radius:50%;background:transparent;transition:background .4s}
-  body.rec #dot{background:var(--live);animation:beat 4s ease-in-out infinite}
-  @keyframes beat{0%,100%{opacity:.18}50%{opacity:.5}}
+  #dot{flex:none;width:5px;height:5px;border-radius:50%;background:var(--live);opacity:0;transition:opacity .3s}
+  #dot.blip{opacity:.55}
 
   /* ---- トーク ---- */
   #chat{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 0 12px}
@@ -356,13 +355,17 @@ $('#pic').onclick=async()=>{
   flash($('#pic'));
   let temp=null, s=stream;
   try{
-    if(!s){ s=temp=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1600}}}); }
+    /* 録画中でなければ、写真用に一時的にカメラだけを開く（audio は要求しない＝マイクは動かない） */
+    if(!s){ s=temp=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}}); }
     const v=$('#src');
     if(v.srcObject!==s){ v.srcObject=s; await v.play().catch(()=>{}); await new Promise(r=>setTimeout(r,400)); }
     const cv=document.createElement('canvas');
-    cv.width=v.videoWidth||1280; cv.height=v.videoHeight||720;
+    cv.width=v.videoWidth||1920; cv.height=v.videoHeight||1080;
     cv.getContext('2d').drawImage(v,0,0,cv.width,cv.height);
-    const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',.85));
+    const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',.92));
+    /* 1コマ取り終えたら、録画中でない限りカメラを即解放してランプを最短で消す。
+       位置情報の取得はカメラを閉じた後に回す（点灯時間を延ばさないため） */
+    if(temp){ temp.getTracks().forEach(t=>t.stop()); temp=null; if(v.srcObject===s) v.srcObject=null; }
     const pos=await getPos(2000);
     await putNote({id:'N'+Date.now(),type:'photo',lat:pos?pos.lat:null,lng:pos?pos.lng:null,blob,at:Date.now()});
   }catch(e){ toast('カメラを使えませんでした'); }
@@ -370,7 +373,7 @@ $('#pic').onclick=async()=>{
 };
 
 /* ================= 録画 ================= */
-let stream=null,recorder=null,session=null,segIdx=0,chunkIdx=0,rot=null,beat=null,wake=null;
+let stream=null,recorder=null,session=null,segIdx=0,chunkIdx=0,rot=null,beat=null,wake=null,stopping=false;
 function pickMime(){
   for(const m of ['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4','video/webm;codecs=vp8,opus','video/webm'])
     {try{if(MediaRecorder.isTypeSupported(m))return m;}catch(e){}}
@@ -380,7 +383,8 @@ const ext=m=>m&&m.includes('mp4')?'mp4':'webm';
 const fmt=ms=>{const t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=t%60,p=n=>String(n).padStart(2,'0');return h?`${h}:${p(m)}:${p(s)}`:`${p(m)}:${p(s)}`;};
 const size=b=>b>=1073741824?(b/1073741824).toFixed(1)+' GB':Math.round(b/1048576)+' MB';
 
-const VIDEO_C={facingMode:{ideal:'environment'},width:{ideal:854},height:{ideal:480},frameRate:{ideal:24,max:30}};
+const VIDEO_C={facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30,max:30}};
+const V_BPS=5000000, A_BPS=128000;
 
 async function recStart(){
   try{
@@ -396,10 +400,11 @@ async function recStart(){
   stream.getTracks().forEach(t=>t.addEventListener('ended',recover));
   await lock();
   document.body.classList.add('rec');
+  const d=$('#dot'); d.classList.add('blip'); setTimeout(()=>d.classList.remove('blip'),900);
 }
 function segStart(){
   chunkIdx=0;
-  const o={videoBitsPerSecond:900000,audioBitsPerSecond:64000};
+  const o={videoBitsPerSecond:V_BPS,audioBitsPerSecond:A_BPS};
   if(session.mime)o.mimeType=session.mime;
   try{recorder=new MediaRecorder(stream,o);}catch(e){recorder=new MediaRecorder(stream);}
   recorder.ondataavailable=async e=>{
@@ -416,7 +421,7 @@ const stopRecorder=()=>new Promise(r=>{
 async function rotate(){ if(!session)return; await stopRecorder(); segIdx++; await putSes(session); if(session)segStart(); }
 async function hb(){ if(!session)return; session.lastAt=Date.now(); await putSes(session); }
 async function recover(){
-  if(!session)return;
+  if(!session||stopping)return;
   try{
     await stopRecorder();
     if(stream) stream.getTracks().forEach(t=>{try{t.stop();}catch(e){}});
@@ -426,18 +431,26 @@ async function recover(){
   }catch(e){ await recStop('カメラが切れたため終了しました'); }
 }
 async function recStop(msg){
+  stopping=true;
   clearInterval(rot); clearInterval(beat); rot=beat=null;
-  await stopRecorder();
-  if(stream)stream.getTracks().forEach(t=>{try{t.stop();}catch(e){}});
+  const s=stream;
+  /* 先にカメラ(映像)を止めて、iOS の緑ランプを即座に消す。'ended' で recover() が
+     走らないよう stopping フラグとリスナ解除で二重に防ぐ */
+  if(s){
+    s.getTracks().forEach(t=>{try{t.removeEventListener('ended',recover);}catch(e){}});
+    s.getVideoTracks().forEach(t=>{try{t.stop();}catch(e){}});
+  }
+  await stopRecorder();                 /* session はまだ生かしておき、最後のチャンクを取りこぼさない */
+  if(s) s.getTracks().forEach(t=>{try{t.stop();}catch(e){}});
   stream=null; recorder=null; $('#src').srcObject=null;
   if(session){ session.active=false; session.endedAt=Date.now(); await putSes(session); session=null; }
-  unlock(); document.body.classList.remove('rec');
+  unlock(); document.body.classList.remove('rec'); stopping=false;
   if(msg) toast(msg);
 }
 async function lock(){ try{ if('wakeLock' in navigator) wake=await navigator.wakeLock.request('screen'); }catch(e){} }
 function unlock(){ try{wake&&wake.release();}catch(e){} wake=null; }
 document.addEventListener('visibilitychange',async()=>{
-  if(document.visibilityState==='visible'&&session){
+  if(document.visibilityState==='visible'&&session&&!stopping){
     await lock();
     if(!stream||!stream.getVideoTracks().some(t=>t.readyState==='live')) recover();
   }
@@ -503,7 +516,7 @@ async function renderNotes(){
 
 async function renderRec(){
   try{ const {quota=0,usage=0}=await navigator.storage.estimate();
-    $('#quota').textContent=`使用 ${size(usage)} ／ 空き ${size(quota-usage)}（およそ ${((quota-usage)/(964000/8*3600)).toFixed(1)} 時間ぶん）`;
+    $('#quota').textContent=`使用 ${size(usage)} ／ 空き ${size(quota-usage)}（およそ ${((quota-usage)/((V_BPS+A_BPS)/8*3600)).toFixed(1)} 時間ぶん）`;
   }catch(e){ $('#quota').textContent='取得できませんでした'; }
 
   const body=$('#recBody');
