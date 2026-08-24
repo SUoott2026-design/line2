@@ -120,6 +120,11 @@
   .btns .del{flex:0 0 62px;color:#a8362a;border-color:#e3cdc9}
   .empty{color:var(--sub);font-size:14px;padding:26px 0;text-align:center}
   h3.sec{font-size:13px;color:var(--sub);margin:24px 0 10px}
+  #wipeAll{
+    width:100%;border:1px solid #e3cdc9;background:#fff;color:#a8362a;
+    border-radius:10px;font:inherit;font-size:14px;padding:12px;margin:6px 0 4px;
+  }
+  #wipeAll:active{background:#f7eeed}
 
   #toast{
     position:absolute;left:50%;bottom:110px;transform:translateX(-50%);
@@ -181,6 +186,7 @@
       <div><strong>保存領域</strong></div>
       <div class="m" id="quota">確認中…</div>
     </div>
+    <button id="wipeAll">録画・写真をすべて削除</button>
     <h3 class="sec">録画バックアップ</h3>
     <div id="recBody"></div>
     <h3 class="sec">写真</h3>
@@ -484,6 +490,18 @@ function openSheet(id){ $('#'+id).classList.add('on'); if(id==='sMgr'){renderRec
 function closeSheet(id){ $('#'+id).classList.remove('on'); }
 $$('[data-close]').forEach(b=>b.onclick=()=>closeSheet(b.dataset.close));
 const esc=s=>s.replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+
+/* 一括削除：保存済みの録画（＋動画データ）と写真をまとめて消す */
+$('#wipeAll').onclick=async()=>{
+  if(session){ toast('録画中は削除できません'); return; }
+  const ss=await allSes(), ns=await allNotes();
+  if(!ss.length&&!ns.length){ toast('削除するものがありません'); return; }
+  if(!confirm(`録画 ${ss.length} 件と写真 ${ns.length} 件をすべて削除します。\n元に戻せません。`)) return;
+  for(const s of ss) await delSes(s.id);
+  for(const n of ns) await delNote(n.id);
+  toast('すべて削除しました');
+  renderRec(); renderNotes();
+};
 
 async function saveBlob(blob,name){
   try{
